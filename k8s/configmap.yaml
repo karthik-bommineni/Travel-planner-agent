@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: travel-planner
+  namespace: travel-planner
+data:
+  CATALOG_DB: /app/data/catalog.sqlite
+  # terraform output -raw catalog_bucket
+  CATALOG_S3_URI: s3://REPLACE_CATALOG_BUCKET/catalog.sqlite
+  GEMINI_MODEL: gemini-2.5-flash

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Travel planner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="top">
+        <p class="eyebrow">Catalog · 2026</p>
+        <h1>Travel planner</h1>
+        <p class="lede">
+          Describe the trip. We plan flights and hotels against the local catalog, then you can dummy-book the ids.
+        </p>
+      </header>
+
+      <main>
+        <section class="composer" aria-label="Trip request">
+          <label for="prompt">Your request</label>
+          <textarea
+            id="prompt"
+            rows="7"
+            placeholder="2 adults, economy, Hyderabad to Munich on 2026-06-15, 3 nights, 3-star with breakfast and gym, afternoon flight, budget $4000, no return…"
+          ></textarea>
+          <div class="row">
+            <button type="button" class="ghost" id="example">Use example</button>
+            <button type="button" class="accent" id="send">Plan trip</button>
+          </div>
+        </section>
+
+        <section class="result" aria-live="polite">
+          <p class="status" id="status" hidden></p>
+          <article class="card" id="itinerary" hidden></article>
+        </section>
+
+        <section class="book" aria-label="Dummy booking">
+          <h2>Dummy booking</h2>
+          <p class="hint">Uses ids from the itinerary. No payment.</p>
+          <div class="grid">
+            <form id="book-flight">
+              <h3>Flight</h3>
+              <label>
+                Offer id
+                <input name="offer_id" placeholder="FLT-…" autocomplete="off" />
+              </label>
+              <label>
+                Passengers
+                <input name="passengers" type="number" min="1" max="9" value="2" />
+              </label>
+              <button type="submit" class="accent">Book flight</button>
+            </form>
+            <form id="book-hotel">
+              <h3>Hotel</h3>
+              <label>
+                Hotel id
+                <input name="hotel_id" placeholder="HTL-…" autocomplete="off" />
+              </label>
+              <label>
+                Nights
+                <input name="nights" type="number" min="1" max="30" value="3" />
+              </label>
+              <button type="submit" class="accent">Book hotel</button>
+            </form>
+          </div>
+          <p class="status error" id="book-error" hidden></p>
+        </section>
+      </main>
+    </div>
+    <div class="toast" id="booked-toast" aria-live="assertive" hidden>
+      <span>BOOKED!</span>
+    </div>
+    <script src="/assets/app.js"></script>
+  </body>
+</html>

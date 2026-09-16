@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[oc]
+*.egg-info
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+wheels/
+
+# Virtualenv and secrets
+.venv/
+.env
+.env.*
+!.env.example
+
+# Local catalogs (csv, gzip, sqlite). Rebuild with scripts/
+data/*
+!data/README.md
+
+# Terraform state and private tfvars (keep *.tfvars.example)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Real Kubernetes secrets (keep secret.example.yaml)
+k8s/secret.yaml
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Unrelated local files
+main.tex
+*.aux
+*.log
+*.out
+*.toc
+*.pdf

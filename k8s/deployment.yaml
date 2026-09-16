@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: travel-planner
+  namespace: travel-planner
+  labels:
+    app: travel-planner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: travel-planner
+  template:
+    metadata:
+      labels:
+        app: travel-planner
+    spec:
+      serviceAccountName: catalog-sync
+      securityContext:
+        fsGroup: 65534
+      initContainers:
+        - name: fetch-catalog
+          image: amazon/aws-cli:2.22.35
+          command:
+            - /bin/sh
+            - -c
+            - aws s3 cp "$CATALOG_S3_URI" /data/catalog.sqlite
+          env:
+            - name: CATALOG_S3_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: travel-planner
+                  key: CATALOG_S3_URI
+          volumeMounts:
+            - name: catalog
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+              ephemeral-storage: 6Gi
+            limits:
+              memory: 512Mi
+              ephemeral-storage: 8Gi
+      containers:
+        - name: app
+          image: travel-planner:0.1.0
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: CATALOG_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: travel-planner
+                  key: CATALOG_DB
+            - name: GEMINI_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: travel-planner
+                  key: GEMINI_MODEL
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: travel-planner
+                  key: GEMINI_API_KEY
+          volumeMounts:
+            - name: catalog
+              mountPath: /app/data
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+              ephemeral-storage: 6Gi
+            limits:
+              memory: 2Gi
+              ephemeral-storage: 8Gi
+      volumes:
+        - name: catalog
+          emptyDir:
+            sizeLimit: 8Gi
