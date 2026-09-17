@@ -13,7 +13,7 @@ These files run the travel planner on the EKS cluster from `infra/`. Terraform b
 | `ingress.yaml` | Optional public ALB. Apply only after AWS Load Balancer Controller is installed |
 | `kustomization.yaml` | Lists the default files so you can `kubectl apply -k k8s` |
 
-The pod does **not** query S3 as a database. The init container downloads `catalog.sqlite` onto an `emptyDir` volume (~4 GB; first start can take several minutes). The app then reads `CATALOG_DB=/app/data/catalog.sqlite`. Restarting the pod downloads again.
+After apply, the UI streams tool calls (`POST /chat/stream`) and Prometheus scrapes `GET /metrics`.
 
 `replicas: 1` on purpose. Each extra replica would copy another 4 GB.
 

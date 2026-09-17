@@ -56,7 +56,7 @@ The model never scans thousands of rows. Search tools return on the order of **5
 
 Gemini is accessed only through `app/llm.py` (`complete`, `complete_json`, optional tools). The rest of the app does not import the Google client.
 
-**Default CLI** (`python -m app.main "..."`): extract `TripSpec` → `plan_trip` → reporter. Gemini does **not** pick inventory. `python -m app.main --tools "..."` is the older function-calling agent.
+**Default CLI** (`python -m app.main "..."`) and `POST /chat`: extract `TripSpec` → Gemini tool-calling (`search_flights`, `search_hotels`, `score_budget`) → itinerary. Python returns shortlists; Gemini picks ids only from those rows. `python -m app.main --pipeline "..."` is extract → `plan_trip` → reporter (no tool calling).
 
 ---
 
@@ -187,12 +187,12 @@ uv run uvicorn app.api:app --reload
 
 Interactive docs: `http://127.0.0.1:8000/docs`.
 
-The planner still calls flight/hotel **functions** in-process. HTTP is a face on top of `run_pipeline` / `plan_trip` / dummy booking.
+The planner still calls flight/hotel **functions** in-process. HTTP `/chat` runs the tool-calling agent; `/plan` still uses `plan_trip`. Dummy booking is separate.
 
 | Method | Path | Role |
 |---|---|---|
 | `GET` | `/health` | Liveness |
-| `POST` | `/chat` | Full pipeline (Gemini extract → `plan_trip` → report). Body: `{ "prompt": "..." }` |
+| `POST` | `/chat` | Agent (extract → Gemini tools on shortlists → itinerary). Body: `{ "prompt": "..." }`. Response includes `steps`. |
 | `POST` | `/plan` | `TripSpec` JSON → `plan_trip` (no Gemini). Useful for evals |
 | `POST` | `/book_flights` | Dummy confirm: lookup `offer_id`, return a fake `booking_ref`. No payment |
 | `POST` | `/book_hotels` | Dummy confirm: lookup `hotel_id`, reject if `rooms_available < 1`. No payment |

@@ -1,6 +1,8 @@
-# Travel planner
+# Travel planner (v2)
 
-One-shot trip planner: describe a 2026 trip, get a grounded itinerary from the local flight/hotel catalog, then dummy-book ids. No real payments.
+Multi-turn 2026 trip agent: describe a trip, watch catalog tool calls stream in, then **confirm** or change people/dates/a city. Dummy-book ids locally. No real payments.
+
+See `docs/v2-implementation.md`.
 
 ## Layout
 
@@ -10,7 +12,7 @@ frontend/     Static UI
 data/         Local catalogs only (see data/README.md; not on GitHub)
 scripts/      Catalog generators / SQLite builders
 tests/        pytest evals (no Gemini)
-docs/         v1 spec (`docs/v1-implementation.md`)
+docs/         v1 + v2 specs
 infra/        Terraform (S3, ECR, EKS)
 k8s/          Kubernetes manifests
 ```
@@ -32,6 +34,8 @@ CLI:
 ```bash
 uv run python -m app.main "2 people, HYD to Munich on 2026-06-15, 3 nights, budget 4000"
 ```
+
+Default path is the v2 agent (extract → catalog tools including timeline check → itinerary → confirm/edit). `--pipeline` uses Python `plan_trip` instead.
 
 Tests: `uv run pytest`
 

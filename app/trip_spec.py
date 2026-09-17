@@ -32,6 +32,8 @@ class FlightLeg(BaseModel):
     origin: str
     destination: str
     date: str
+    time_of_day: TimeOfDay | None = None
+    cabin: Cabin | None = None
 
     @field_validator("origin", "destination")
     @classmethod
@@ -51,6 +53,8 @@ class Stay(BaseModel):
     city: str
     nights: int = Field(ge=1, le=30)
     check_in: str | None = None
+    min_stars: int | None = Field(default=None, ge=1, le=5)
+    amenities: list[str] = Field(default_factory=list)
 
     @field_validator("city")
     @classmethod
@@ -59,6 +63,16 @@ class Stay(BaseModel):
         if not text:
             raise ValueError("city cannot be empty")
         return text
+
+    @field_validator("amenities")
+    @classmethod
+    def stay_amenities(cls, value: list[str]) -> list[str]:
+        out: list[str] = []
+        for item in value:
+            key = item.strip().lower()
+            if key and key not in out:
+                out.append(key)
+        return out
 
     @field_validator("check_in")
     @classmethod
@@ -131,6 +145,18 @@ class TripSpec(BaseModel):
                 "need one inbound flight per stay, plus at most one onward/return hop"
             )
         return self
+
+    def stay_hotel(self, index: int) -> HotelPrefs:
+        stay = self.stays[index]
+        stars = stay.min_stars if stay.min_stars is not None else self.hotel.min_stars
+        amenities = stay.amenities or list(self.hotel.amenities)
+        return HotelPrefs(min_stars=stars, amenities=amenities)
+
+    def leg_cabin(self, index: int) -> Cabin:
+        return self.legs[index].cabin or self.cabin
+
+    def leg_time_of_day(self, index: int) -> TimeOfDay | None:
+        return self.legs[index].time_of_day or self.flight.time_of_day
 
     @property
     def budget_ceiling(self) -> float | None:

@@ -1,6 +1,6 @@
 [project]
 name = "travel-planner-agent"
-version = "0.1.0"
+version = "0.2.0"
 description = "Chat trip planner over a local 2026 flight and hotel catalog"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -9,7 +9,7 @@ dependencies = [
     "google-genai>=2.20.0",
     "pandas>=3.0.5",
     "pydantic>=2.0",
-    "python-dotenv>=1.2.3",
+    "prometheus-client>=0.21.0",
     "uvicorn>=0.32.0",
 ]
 

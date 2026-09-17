@@ -5,6 +5,7 @@ from __future__ import annotations
 from .budget import score_budget
 from .flights import search_flights
 from .hotels import search_hotels
+from .timeline import check_timeline
 
 SEARCH_FLIGHT_ARGS = {
     "origin",
@@ -19,6 +20,16 @@ SEARCH_FLIGHT_ARGS = {
 }
 
 SEARCH_HOTEL_ARGS = {"city", "min_stars", "amenities", "sort_by"}
+
+CHECK_TIMELINE_ARGS = {
+    "flight_offer_ids",
+    "hotel_ids",
+    "nights",
+    "stay_cities",
+    "check_ins",
+    "flight_offer_id",
+    "hotel_id",
+}
 
 SCORE_BUDGET_ARGS = {
     "passengers",
@@ -36,9 +47,10 @@ DECLARATIONS = [
         "name": "search_flights",
         "description": (
             "Search the local flight catalog for one origin→destination on one date "
-            "(YYYY-MM-DD in 2026). Optional: cabin_class, time_of_day, price range, "
+            "(YYYY-MM-DD in 2026). Returns a shortlist of at most 5 flights. "
+            "Optional: cabin_class, time_of_day, price range, "
             "sort_by (price|duration|most_expensive), is_refundable (yes|no). "
-            "Does not book. Use most_expensive when the user wants the priciest flights."
+            "Does not book. Pick an offer_id only from this shortlist."
         ),
         "parameters": {
             "type": "object",
@@ -65,9 +77,10 @@ DECLARATIONS = [
     {
         "name": "search_hotels",
         "description": (
-            "Search hotels in one city. Optional min_stars, sort_by "
+            "Search hotels in one city. Returns a shortlist of at most 5 hotels. "
+            "Optional min_stars, sort_by "
             "(price|most_expensive), amenities as comma-separated hard filters "
-            "(e.g. gym,breakfast). Does not book."
+            "(e.g. gym,breakfast). Does not book. Pick a hotel_id only from this shortlist."
         ),
         "parameters": {
             "type": "object",
@@ -109,12 +122,51 @@ DECLARATIONS = [
             "required": ["passengers"],
         },
     },
+    {
+        "name": "check_timeline",
+        "description": (
+            "Validate chosen flight and hotel ids against check-in, checkout, and "
+            "a 3-hour airport buffer. Pass the same ids as score_budget, nights per "
+            "stay, and stay_cities. Call this after score_budget. If ok is false, "
+            "pick different ids from the shortlists and score again."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "flight_offer_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "hotel_ids": {"type": "array", "items": {"type": "string"}},
+                "nights": {"type": "array", "items": {"type": "integer"}},
+                "stay_cities": {"type": "array", "items": {"type": "string"}},
+                "check_ins": {"type": "array", "items": {"type": "string"}},
+                "flight_offer_id": {"type": "string"},
+                "hotel_id": {"type": "string"},
+            },
+            "required": ["flight_offer_ids", "hotel_ids", "nights"],
+        },
+    },
 ]
 
+SHORTLIST = 5
+
+
+def _search_flights(**kwargs):
+    kwargs.pop("limit", None)
+    return search_flights(**kwargs, limit=SHORTLIST)
+
+
+def _search_hotels(**kwargs):
+    kwargs.pop("limit", None)
+    return search_hotels(**kwargs, limit=SHORTLIST)
+
+
 DISPATCH = {
-    "search_flights": (search_flights, SEARCH_FLIGHT_ARGS),
-    "search_hotels": (search_hotels, SEARCH_HOTEL_ARGS),
+    "search_flights": (_search_flights, SEARCH_FLIGHT_ARGS),
+    "search_hotels": (_search_hotels, SEARCH_HOTEL_ARGS),
     "score_budget": (score_budget, SCORE_BUDGET_ARGS),
+    "check_timeline": (check_timeline, CHECK_TIMELINE_ARGS),
 }
 
 
@@ -123,4 +175,12 @@ def run_tool(name: str, args: dict) -> dict:
         return {"ok": False, "error": "unknown_tool", "name": name}
     fn, allowed = DISPATCH[name]
     cleaned = {k: v for k, v in dict(args).items() if k in allowed}
-    return fn(**cleaned)
+    result = fn(**cleaned)
+    if isinstance(result, dict):
+        from ..metrics import observe_tool  # late import; avoid cycles if any
+
+        ok = result.get("ok")
+        if ok is None:
+            ok = not result.get("error")
+        observe_tool(name, bool(ok))
+    return result

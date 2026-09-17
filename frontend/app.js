@@ -4,11 +4,15 @@ const EXAMPLE =
 const promptEl = document.getElementById("prompt");
 const sendBtn = document.getElementById("send");
 const exampleBtn = document.getElementById("example");
+const resetBtn = document.getElementById("reset");
 const statusEl = document.getElementById("status");
 const itineraryEl = document.getElementById("itinerary");
+const traceEl = document.getElementById("trace");
 const bookError = document.getElementById("book-error");
 const bookedToast = document.getElementById("booked-toast");
 let toastTimer;
+let sessionId = null;
+let liveText = "";
 
 function showStatus(text, isError = false) {
   statusEl.hidden = !text;
@@ -61,30 +65,103 @@ function fillIds(text) {
   }
 }
 
-async function planTrip() {
+function addTraceChip(step) {
+  traceEl.hidden = false;
+  const ids = (step.shortlist || []).slice(0, 5).join(", ");
+  const extra = step.total != null ? ` · $${step.total}` : ids ? ` · ${ids}` : "";
+  const err = step.error ? ` · ${step.error}` : "";
+  const li = document.createElement("li");
+  li.textContent = `${step.name || "tool"}${extra}${err}`;
+  traceEl.appendChild(li);
+}
+
+function showItinerary(text) {
+  itineraryEl.hidden = false;
+  itineraryEl.classList.add("itinerary");
+  itineraryEl.innerHTML = renderMarkdown(text);
+  fillIds(text);
+}
+
+function handleEvent(event) {
+  if (event.type === "status") {
+    showStatus(event.message || "Working…");
+    return;
+  }
+  if (event.type === "tool") {
+    showStatus(`Calling ${event.name}…`);
+    return;
+  }
+  if (event.type === "tool_result") {
+    addTraceChip(event);
+    return;
+  }
+  if (event.type === "text") {
+    if (event.append) {
+      liveText = `${liveText}\n\n${event.text || ""}`;
+    } else {
+      liveText = event.text || "";
+    }
+    showItinerary(liveText);
+    showStatus("");
+    return;
+  }
+  if (event.type === "error") {
+    showStatus(event.message || "Something went wrong.", true);
+    return;
+  }
+  if (event.type === "done" && event.session_id) {
+    sessionId = event.session_id;
+  }
+}
+
+async function readSse(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split("\n\n");
+    buffer = chunks.pop() || "";
+    for (const chunk of chunks) {
+      const line = chunk
+        .split("\n")
+        .filter((row) => row.startsWith("data:"))
+        .map((row) => row.slice(5).trim())
+        .join("");
+      if (!line) continue;
+      handleEvent(JSON.parse(line));
+    }
+  }
+}
+
+async function sendMessage() {
   const prompt = promptEl.value.trim();
   if (!prompt) {
     showStatus("Write a trip request first.", true);
     return;
   }
   sendBtn.disabled = true;
-  itineraryEl.hidden = true;
-  showStatus("Planning — this can take a little while…");
+  if (!sessionId) {
+    traceEl.innerHTML = "";
+    traceEl.hidden = true;
+    liveText = "";
+  }
+  showStatus("Planning…");
   try {
-    const response = await fetch("/chat", {
+    const response = await fetch("/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, session_id: sessionId }),
     });
-    const data = await response.json();
     if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
       throw new Error(data.detail || "Request failed");
     }
-    itineraryEl.hidden = false;
-    itineraryEl.classList.add("itinerary");
-    itineraryEl.innerHTML = renderMarkdown(data.text || "");
-    fillIds(data.text || "");
-    showStatus("");
+    await readSse(response);
+    promptEl.value = "";
+    promptEl.placeholder = "confirm — or change people, dates, a flight, a hotel…";
   } catch (err) {
     showStatus(err.message || "Could not plan this trip.", true);
   } finally {
@@ -129,12 +206,24 @@ exampleBtn.addEventListener("click", () => {
   promptEl.focus();
 });
 
-sendBtn.addEventListener("click", planTrip);
+resetBtn.addEventListener("click", () => {
+  sessionId = null;
+  liveText = "";
+  traceEl.innerHTML = "";
+  traceEl.hidden = true;
+  itineraryEl.hidden = true;
+  itineraryEl.innerHTML = "";
+  promptEl.placeholder =
+    "2 adults, economy, Hyderabad to Munich on 2026-06-15, 3 nights, 3-star with breakfast and gym, afternoon flight, budget $4000, no return…";
+  showStatus("Started a new trip.");
+});
+
+sendBtn.addEventListener("click", sendMessage);
 
 promptEl.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
     event.preventDefault();
-    planTrip();
+    sendMessage();
   }
 });
 

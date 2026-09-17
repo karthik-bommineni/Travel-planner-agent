@@ -1,4 +1,4 @@
-"""Default product path: extract spec → plan_trip → report. No Gemini tool calls."""
+"""Extract spec → Python plan_trip → report. No Gemini tool calls. CLI: --pipeline."""
 
 from __future__ import annotations
 

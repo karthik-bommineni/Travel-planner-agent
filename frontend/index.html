@@ -15,10 +15,11 @@
   <body>
     <div class="shell">
       <header class="top">
-        <p class="eyebrow">Catalog · 2026</p>
+        <p class="eyebrow">Catalog · 2026 · v2</p>
         <h1>Travel planner</h1>
         <p class="lede">
-          Describe the trip. We plan flights and hotels against the local catalog, then you can dummy-book the ids.
+          Describe a trip (one city or several). The agent calls catalog tools as it plans.
+          Then confirm, or change people, dates, or a city.
         </p>
       </header>
 
@@ -32,12 +33,14 @@
           ></textarea>
           <div class="row">
             <button type="button" class="ghost" id="example">Use example</button>
-            <button type="button" class="accent" id="send">Plan trip</button>
+            <button type="button" class="ghost" id="reset">New trip</button>
+            <button type="button" class="accent" id="send">Send</button>
           </div>
         </section>
 
         <section class="result" aria-live="polite">
           <p class="status" id="status" hidden></p>
+          <ol class="trace" id="trace" hidden></ol>
           <article class="card" id="itinerary" hidden></article>
         </section>
 

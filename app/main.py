@@ -1,11 +1,11 @@
-"""Trip planner: extract → Python plan → write-up. Optional --tools uses Gemini function calling."""
+"""Trip planner CLI. Default is the tool-calling agent. --pipeline uses Python plan_trip."""
 
 from __future__ import annotations
 
 import argparse
 import sys
 
-from .agent import run_agent
+from .session import run_turn
 from .pipeline import run_pipeline
 
 
@@ -15,9 +15,9 @@ def main() -> None:
     )
     parser.add_argument("prompt", nargs="*", help="Trip request")
     parser.add_argument(
-        "--tools",
+        "--pipeline",
         action="store_true",
-        help="Use the Gemini tool-calling agent instead of extract→planner→report",
+        help="Extract → Python plan_trip → report (no Gemini tool calling)",
     )
     parser.add_argument(
         "--quiet",
@@ -33,10 +33,11 @@ def main() -> None:
         )
         sys.exit(1)
     trace = not args.quiet
-    if args.tools:
-        print(run_agent(prompt, trace=trace))
-    else:
+    if args.pipeline:
         print(run_pipeline(prompt, trace=trace))
+        return
+    turn = run_turn(prompt, trace=trace)
+    print(turn.text)
 
 
 if __name__ == "__main__":

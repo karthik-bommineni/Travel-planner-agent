@@ -2,34 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
 from typing import Any
 
 from .tools.flights import search_flights
-from .tools.hotels import resolve_city, search_hotels
+from .tools.hotels import search_hotels
+from .tools.timeline import evaluate_timeline
 from .trip_spec import TripSpec
 
-AIRPORT_BUFFER_HOURS = 3
+
 SHORTLIST = 5
-DEFAULT_CHECK_OUT = "11:00"
-
-
-def _minutes(hhmm: str) -> int:
-    raw = str(hhmm).strip()[:5]
-    hours, mins = raw.split(":")
-    return int(hours) * 60 + int(mins)
-
-
-def _as_date(value: str) -> date:
-    return date.fromisoformat(str(value)[:10])
-
-
-def _same_city(a: str, b: str) -> bool:
-    left = resolve_city(a)
-    right = resolve_city(b)
-    if left and right:
-        return left == right
-    return a.strip().lower() == b.strip().lower()
 
 
 def _flight_cost(flight: dict, passengers: int) -> int:
@@ -54,17 +35,18 @@ def _merge_unique(primary: list[dict], extra: list[dict], key: str, limit: int) 
     return out
 
 
-def _leg_shortlist(spec: TripSpec, origin: str, destination: str, day: str) -> dict:
+def _leg_shortlist(spec: TripSpec, leg_index: int) -> dict:
     prefs = spec.flight
+    leg = spec.legs[leg_index]
     base_sort = prefs.sort_by
     if spec.price_preference == "most_expensive" and base_sort != "duration":
         base_sort = "price"
     found = search_flights(
-        origin,
-        destination,
-        day,
-        spec.cabin,
-        time_of_day=prefs.time_of_day,
+        leg.origin,
+        leg.destination,
+        leg.date,
+        spec.leg_cabin(leg_index),
+        time_of_day=spec.leg_time_of_day(leg_index),
         min_price_usd=prefs.min_price_usd,
         max_price_usd=prefs.max_price_usd,
         sort_by=base_sort,
@@ -76,11 +58,11 @@ def _leg_shortlist(spec: TripSpec, origin: str, destination: str, day: str) -> d
     flights = list(found["flights"])
     if spec.price_preference == "most_expensive":
         high = search_flights(
-            origin,
-            destination,
-            day,
-            spec.cabin,
-            time_of_day=prefs.time_of_day,
+            leg.origin,
+            leg.destination,
+            leg.date,
+            spec.leg_cabin(leg_index),
+            time_of_day=spec.leg_time_of_day(leg_index),
             min_price_usd=prefs.min_price_usd,
             max_price_usd=prefs.max_price_usd,
             sort_by="price_desc",
@@ -92,11 +74,13 @@ def _leg_shortlist(spec: TripSpec, origin: str, destination: str, day: str) -> d
     return found
 
 
-def _stay_shortlist(spec: TripSpec, city: str) -> dict:
+def _stay_shortlist(spec: TripSpec, stay_index: int) -> dict:
+    stay = spec.stays[stay_index]
+    hotel = spec.stay_hotel(stay_index)
     cheap = search_hotels(
-        city,
-        min_stars=spec.hotel.min_stars,
-        amenities=spec.hotel.amenities,
+        stay.city,
+        min_stars=hotel.min_stars,
+        amenities=hotel.amenities,
         sort_by="price",
         limit=SHORTLIST,
     )
@@ -105,9 +89,9 @@ def _stay_shortlist(spec: TripSpec, city: str) -> dict:
     hotels = list(cheap["hotels"])
     if spec.price_preference == "most_expensive":
         high = search_hotels(
-            city,
-            min_stars=spec.hotel.min_stars,
-            amenities=spec.hotel.amenities,
+            stay.city,
+            min_stars=hotel.min_stars,
+            amenities=hotel.amenities,
             sort_by="price_desc",
             limit=SHORTLIST,
         )
@@ -116,41 +100,15 @@ def _stay_shortlist(spec: TripSpec, city: str) -> dict:
     return cheap
 
 
-def _stay_check_in(spec: TripSpec, stay_index: int, incoming: dict) -> date:
-    stay = spec.stays[stay_index]
-    if stay.check_in:
-        return _as_date(stay.check_in)
-    return _as_date(incoming["arrive_date"])
-
-
 def _timeline_ok(spec: TripSpec, flights: list[dict], hotels: list[dict]) -> bool:
-    """Inbound date = night-1 check-in; outbound is checkout morning minus buffer."""
-    for i, stay in enumerate(spec.stays):
-        incoming = flights[i]
-        hotel = hotels[i]
-        check_in = _stay_check_in(spec, i, incoming)
-        checkout = check_in + timedelta(days=stay.nights)
-        if _as_date(incoming["arrive_date"]) != check_in:
-            return False
-        dest = incoming.get("destination_city") or incoming.get("destination_airport")
-        hotel_city = hotel.get("city") or hotel.get("city_name")
-        if dest and hotel_city and not _same_city(str(dest), str(hotel_city)):
-            return False
-        if not _same_city(stay.city, str(hotel_city or stay.city)):
-            return False
-        if i + 1 >= len(flights):
-            continue
-        outgoing = flights[i + 1]
-        if _as_date(outgoing["depart_date"]) != checkout:
-            return False
-        origin = outgoing.get("origin_city") or outgoing.get("origin_airport")
-        if origin and hotel_city and not _same_city(str(origin), str(hotel_city)):
-            return False
-        check_out = str(hotel.get("check_out") or DEFAULT_CHECK_OUT)
-        earliest = _minutes(check_out) - AIRPORT_BUFFER_HOURS * 60
-        if _minutes(outgoing["depart_time"]) < earliest:
-            return False
-    return True
+    ok, _reason = evaluate_timeline(
+        flights,
+        hotels,
+        [stay.nights for stay in spec.stays],
+        [stay.city for stay in spec.stays],
+        [stay.check_in for stay in spec.stays],
+    )
+    return ok
 
 
 def _line_items(spec: TripSpec, flights: list[dict], hotels: list[dict]) -> list[dict]:
@@ -223,7 +181,7 @@ def plan_trip(spec: TripSpec) -> dict:
     """Search shortlists, drop illegal timelines, then pick min or max total. No LLM."""
     flight_lists: list[list[dict]] = []
     for i, leg in enumerate(spec.legs):
-        found = _leg_shortlist(spec, leg.origin, leg.destination, leg.date)
+        found = _leg_shortlist(spec, i)
         if found.get("error") or not found.get("flights"):
             return {
                 "ok": False,
@@ -236,7 +194,7 @@ def plan_trip(spec: TripSpec) -> dict:
 
     hotel_lists: list[list[dict]] = []
     for i, stay in enumerate(spec.stays):
-        found = _stay_shortlist(spec, stay.city)
+        found = _stay_shortlist(spec, i)
         if found.get("error") or not found.get("hotels"):
             return {
                 "ok": False,

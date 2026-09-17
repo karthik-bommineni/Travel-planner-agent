@@ -23,7 +23,10 @@ or hotel.min_stars at 1 if they named stars or amenities.
 Rules:
 - Dates must be YYYY-MM-DD in 2026. If they omit the year, use 2026.
 - legs: one object per flight hop they asked for (origin, destination, date).
+  Optional per-leg time_of_day or cabin when they named it for that hop only.
 - stays: one object per city they sleep in (city, nights). Optional check_in.
+  Optional per-stay min_stars and amenities when that city has its own hotel ask.
+- hotel / flight at the top level are defaults for stays/legs that omit overrides.
 - One inbound flight per stay, plus at most one extra onward/return hop.
 - cabin: economy or business (default economy).
 - passengers: "2 adults" / "two people" → 2.
@@ -99,6 +102,36 @@ def _enrich_from_prompt(raw: dict, prompt: str) -> dict:
     raw["hotel"] = hotel
     raw["flight"] = flight
     return raw
+
+
+PATCH_SYSTEM = """
+Update the trip spec JSON from a user edit. Return the FULL spec object only.
+Change only what they asked (passengers, a date, a city hotel filter, a leg time_of_day).
+Do not add flights or cities they did not request. Keep 2026 YYYY-MM-DD dates.
+""".strip()
+
+
+def patch_trip_spec(spec: TripSpec, edit: str) -> TripSpec | dict:
+    """Merge a follow-up edit into an existing spec."""
+    payload = f"Current spec:\n{spec.model_dump_json()}\n\nUser edit:\n{edit}"
+    try:
+        raw = complete_json(payload, system=PATCH_SYSTEM, schema=TripSpec.model_json_schema())
+    except Exception:
+        raw = complete_json(payload, system=PATCH_SYSTEM)
+    if raw.get("error") and not raw.get("legs"):
+        return {
+            "error": str(raw.get("error") or "incomplete"),
+            "message": str(raw.get("message") or "Could not apply that change."),
+        }
+    raw = _enrich_from_prompt(raw, edit)
+    try:
+        return TripSpec.model_validate(raw)
+    except ValidationError as exc:
+        return {
+            "error": "invalid_spec",
+            "message": "The updated trip spec failed validation.",
+            "detail": exc.errors(),
+        }
 
 
 def extract_trip_spec(prompt: str) -> TripSpec | dict:
